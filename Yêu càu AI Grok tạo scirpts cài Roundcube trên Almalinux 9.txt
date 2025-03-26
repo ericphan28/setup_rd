@@ -1,0 +1,8 @@
+thống kê toàn bộ việc cài đặt roundcube lên almalinux 3 từ việt cấu hình spf, dkim, dmacr đến postfix, dovecot 
+Sử dụng scripts tự động nếu cần edit file cấu hình  thay vì sử dụng vi hay nano
+
+6 file trên đây là toàn bộ quy trình cài đặt roudncube lên vps almalinux với ip là 103.176.20.154
+IP trên đã được cấu hình ptr để trỏ về domain rocketsmtp.site mà tôi đã mua của namecheap
+hãy phân tích 5 file bash trên. 
+Xem có điểm nào bất login thì sửa
+Sử dụng scripts tự động nếu cần edit file cấu hình  thay vì sử dụng vi hay nano
