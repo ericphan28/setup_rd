@@ -44,9 +44,9 @@ y
 y
 EOF
 
-# Cài đặt PHP 8.1 và các module cần thiết
+# Cài đặt PHP 8.3 và các module cần thiết
 echo "Cài đặt PHP 8.1 và module..."
-sudo dnf module enable php:8.1 -y
+sudo dnf module enable php:8.3 -y
 sudo dnf install -y php php-mysqlnd php-gd php-imap php-ldap php-odbc php-pear php-xml php-mbstring php-snmp php-soap php-intl php-zip
 sudo systemctl restart httpd
 
