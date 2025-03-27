@@ -1,4 +1,4 @@
-dnf install -y postfix dovecot cyrus-sasl cyrus-sasl-plain cyrus-sasl-md5 cyrus-sasl-sql  s-nail
+dnf install -y postfix dovecot cyrus-sasl cyrus-sasl-plain cyrus-sasl-md5 cyrus-sasl-sql  s-nail bind-utils
 
 postconf -e "myhostname = rocketsmtp.site"
 postconf -e "mydomain = rocketsmtp.site"
