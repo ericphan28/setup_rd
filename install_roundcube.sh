@@ -47,7 +47,7 @@ EOF
 # Cài đặt PHP 8.3 và các module cần thiết
 echo "Cài đặt PHP 8.1 và module..."
 sudo dnf module enable php:8.3 -y
-sudo dnf install -y php php-mysqlnd php-gd php-imap php-ldap php-odbc php-pear php-xml php-mbstring php-snmp php-soap php-intl php-zip
+sudo dnf install -y php83-php php83-php-mysqlnd php83-php-gd php83-php-imap php83-php-ldap php83-php-odbc php83-php-pear php83-php-xml php83-php-mbstring php83-php-snmp php83-php-soap php83-php-intl php83-php-zip
 sudo systemctl restart httpd
 
 # Cài đặt Postfix
