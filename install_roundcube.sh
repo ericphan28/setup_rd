@@ -106,6 +106,53 @@ service auth {
 }
 EOF'
 
+# Cài đặt Certbot để lấy SSL từ Let's Encrypt
+echo "Cài đặt Certbot để lấy SSL cho Apache..."
+sudo dnf install -y certbot python3-certbot-apache
+
+# Lấy chứng chỉ SSL cho domain (sửa lại nếu domain khác)
+DOMAIN="rocketsmtp.site"
+EMAIL="admin@$DOMAIN"
+
+sudo certbot --apache -d "$DOMAIN" --email "$EMAIL" --agree-tos --non-interactive --redirect
+
+# Cài đặt TLS cho Postfix
+echo "Cấu hình TLS cho Postfix..."
+sudo postconf -e "smtpd_tls_cert_file = /etc/letsencrypt/live/$DOMAIN/fullchain.pem"
+sudo postconf -e "smtpd_tls_key_file = /etc/letsencrypt/live/$DOMAIN/privkey.pem"
+sudo postconf -e "smtpd_use_tls = yes"
+sudo postconf -e "smtpd_tls_security_level = may"
+sudo postconf -e "smtpd_tls_auth_only = yes"
+sudo postconf -e "smtp_tls_security_level = may"
+sudo postconf -e "smtp_tls_CAfile = /etc/ssl/certs/ca-bundle.crt"
+sudo systemctl restart postfix
+
+sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+-keyout /etc/pki/tls/private/localhost.key \
+-out /etc/pki/tls/certs/localhost.crt
+
+CONFIG_FILE="/etc/httpd/conf.d/rocketsmtp.conf"
+VIRTUAL_HOST="<VirtualHost *:80>
+    ServerName rocketsmtp.site
+    DocumentRoot /var/www/html
+</VirtualHost>"
+
+# Nếu file chưa tồn tại, tạo mới và ghi nội dung
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "$VIRTUAL_HOST" | sudo tee "$CONFIG_FILE"
+else
+    # Kiểm tra xem VirtualHost đã có trong file chưa, nếu chưa thì thêm vào
+    if ! grep -q "ServerName rockets
+
+sudo systemctl restart httpd
+
+# Thiết lập gia hạn tự động cho SSL
+echo "Thiết lập gia hạn SSL tự động..."
+echo "0 3 * * * root certbot renew --quiet" | sudo tee -a /etc/crontab > /dev/null
+
+echo "Cài đặt TLS hoàn tất!"
+🔥 Tóm tắt những gì đã cập nhật:
+
 sudo systemctl restart dovecot
 
 # Tạo cơ sở dữ liệu và người dùng cho Roundcube
