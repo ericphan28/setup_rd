@@ -1,0 +1,210 @@
+#!/bin/bash
+
+# Script cài đặt Postfix, Dovecot, Roundcube trên AlmaLinux 9
+# Cải tiến bởi Grok 3 - xAI, ngày 27/03/2025
+
+# Thông số cấu hình (có thể thay đổi)
+DOMAIN="rocketsmtp.site"
+IP="103.176.20.154"
+EMAIL_USER="mailuser"
+EMAIL_PASS="pss123"
+MYSQL_ROOT_PASS="Tnt@510510"
+DB_NAME="roundcubemail"
+DB_USER="roundcubeuser"
+DB_PASS="roundcubepass"
+
+# Hàm kiểm tra lỗi
+check_error() {
+    if [ $? -ne 0 ]; then
+        echo "Lỗi: $1"
+        exit 1
+    fi
+}
+
+# Cập nhật hệ thống
+echo "Đang cập nhật hệ thống..."
+sudo dnf update -y
+check_error "Cập nhật hệ thống thất bại"
+
+# Cài đặt EPEL và công cụ cơ bản
+echo "Cài đặt EPEL và công cụ cơ bản..."
+sudo dnf install -y epel-release nano telnet bind-utils tar wget sed
+check_error "Cài đặt EPEL hoặc công cụ cơ bản thất bại"
+
+# Cài đặt Apache
+echo "Cài đặt Apache..."
+sudo dnf install -y httpd
+sudo systemctl start httpd
+sudo systemctl enable httpd
+check_error "Cài đặt hoặc khởi động Apache thất bại"
+
+# Cài đặt MariaDB
+echo "Cài đặt MariaDB..."
+sudo dnf install -y mariadb-server
+sudo systemctl start mariadb
+sudo systemctl enable mariadb
+check_error "Cài đặt hoặc khởi động MariaDB thất bại"
+
+# Bảo mật MariaDB
+echo "Bảo mật MariaDB..."
+sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '$MYSQL_ROOT_PASS';"
+sudo mysql_secure_installation <<EOF
+
+y
+$MYSQL_ROOT_PASS
+$MYSQL_ROOT_PASS
+n
+y
+y
+y
+EOF
+check_error "Bảo mật MariaDB thất bại"
+
+# Cài đặt PHP 8.3 từ Remi
+echo "Cài đặt PHP 8.3..."
+sudo dnf install -y https://rpms.remirepo.net/enterprise/remi-release-9.rpm
+sudo dnf module enable php:remi-8.3 -y
+sudo dnf install -y php83-php php83-php-mysqlnd php83-php-gd php83-php-imap php83-php-ldap php83-php-mbstring php83-php-intl php83-php-zip
+sudo systemctl restart httpd
+check_error "Cài đặt PHP 8.3 thất bại"
+
+# Cài đặt Postfix
+echo "Cài đặt Postfix..."
+sudo dnf install -y postfix
+sudo systemctl start postfix
+sudo systemctl enable postfix
+check_error "Cài đặt hoặc khởi động Postfix thất bại"
+
+# Cấu hình Postfix
+echo "Cấu hình Postfix..."
+sudo postconf -e "myhostname = $DOMAIN"
+sudo postconf -e "mydomain = $DOMAIN"
+sudo postconf -e "myorigin = \$mydomain"
+sudo postconf -e "inet_interfaces = all"
+sudo postconf -e "inet_protocols = ipv4"
+sudo postconf -e "mydestination = \$myhostname, localhost.\$mydomain, localhost"
+sudo postconf -e "mynetworks = 127.0.0.0/8, $IP/32"
+sudo postconf -e "home_mailbox = Maildir/"
+sudo systemctl restart postfix
+check_error "Cấu hình Postfix thất bại"
+
+# Cài đặt Dovecot
+echo "Cài đặt Dovecot..."
+sudo dnf install -y dovecot
+sudo systemctl start dovecot
+sudo systemctl enable dovecot
+check_error "Cài đặt hoặc khởi động Dovecot thất bại"
+
+# Cấu hình Dovecot
+echo "Cấu hình Dovecot..."
+sudo bash -c "cat > /etc/dovecot/dovecot.conf <<EOF
+listen = *
+protocols = imap
+EOF"
+sudo bash -c "cat > /etc/dovecot/conf.d/10-mail.conf <<EOF
+mail_location = maildir:~/Maildir
+EOF"
+sudo bash -c "cat > /etc/dovecot/conf.d/10-auth.conf <<EOF
+disable_plaintext_auth = yes
+auth_mechanisms = plain login
+!include auth-system.conf.ext
+EOF"
+sudo bash -c "cat > /etc/dovecot/conf.d/10-master.conf <<EOF
+service imap-login {
+  inet_listener imap {
+    port = 143
+  }
+}
+service auth {
+  unix_listener auth-userdb {
+    mode = 0666
+  }
+}
+EOF"
+check_error "Cấu hình Dovecot thất bại"
+
+# Cài đặt Certbot và lấy SSL
+echo "Cài đặt Certbot và lấy SSL..."
+sudo dnf install -y certbot python3-certbot-apache
+sudo certbot --apache -d "$DOMAIN" --email "admin@$DOMAIN" --agree-tos --non-interactive --redirect || {
+    echo "Lấy chứng chỉ SSL thất bại. Kiểm tra DNS của $DOMAIN."
+    exit 1
+}
+
+# Cấu hình SSL cho Postfix
+sudo postconf -e "smtpd_tls_cert_file = /etc/letsencrypt/live/$DOMAIN/fullchain.pem"
+sudo postconf -e "smtpd_tls_key_file = /etc/letsencrypt/live/$DOMAIN/privkey.pem"
+sudo postconf -e "smtpd_use_tls = yes"
+sudo postconf -e "smtpd_tls_security_level = may"
+sudo systemctl restart postfix
+
+# Cấu hình SSL cho Dovecot
+sudo mkdir -p /etc/pki/dovecot/certs /etc/pki/dovecot/private
+sudo openssl req -new -x509 -days 365 -nodes -out /etc/pki/dovecot/certs/dovecot.pem -keyout /etc/pki/dovecot/private/dovecot.key -subj "/C=VN/ST=Hanoi/L=Hanoi/O=YourOrg/CN=mail.$DOMAIN"
+sudo chmod 644 /etc/pki/dovecot/certs/dovecot.pem
+sudo chmod 600 /etc/pki/dovecot/private/dovecot.key
+sudo chown dovecot:dovecot /etc/pki/dovecot/certs/dovecot.pem /etc/pki/dovecot/private/dovecot.key
+sudo sed -i "s|^ssl =.*|ssl = yes|" /etc/dovecot/conf.d/10-ssl.conf
+sudo sed -i "s|^ssl_cert =.*|ssl_cert = </etc/pki/dovecot/certs/dovecot.pem|" /etc/dovecot/conf.d/10-ssl.conf
+sudo sed -i "s|^ssl_key =.*|ssl_key = </etc/pki/dovecot/private/dovecot.key|" /etc/dovecot/conf.d/10-ssl.conf
+sudo systemctl restart dovecot
+
+# Tạo cơ sở dữ liệu cho Roundcube
+echo "Tạo cơ sở dữ liệu cho Roundcube..."
+sudo mysql -u root -p"$MYSQL_ROOT_PASS" -e "DROP DATABASE IF EXISTS $DB_NAME; CREATE DATABASE $DB_NAME;"
+sudo mysql -u root -p"$MYSQL_ROOT_PASS" -e "CREATE USER IF NOT EXISTS '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASS'; GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'localhost'; FLUSH PRIVILEGES;"
+check_error "Tạo cơ sở dữ liệu Roundcube thất bại"
+
+# Tải và cài đặt Roundcube (phiên bản mới nhất)
+echo "Tải và cài đặt Roundcube..."
+cd /var/www/html
+sudo wget -q https://github.com/roundcube/roundcubemail/releases/download/1.6.6/roundcubemail-1.6.6-complete.tar.gz
+sudo tar -xvf roundcubemail-1.6.6-complete.tar.gz
+sudo mv roundcubemail-1.6.6 roundcube
+sudo chown -R apache:apache roundcube
+sudo chmod -R 755 roundcube
+check_error "Cài đặt Roundcube thất bại"
+
+# Cấu hình Roundcube
+echo "Cấu hình Roundcube..."
+cd /var/www/html/roundcube
+sudo cp config/config.inc.php.sample config/config.inc.php
+sudo sed -i "s|\$config\['db_dsnw'\] = .*|\$config\['db_dsnw'\] = 'mysql://$DB_USER:$DB_PASS@localhost/$DB_NAME';|" config/config.inc.php
+sudo sed -i "s|\$config\['default_host'\] = .*|\$config\['default_host'\] = 'localhost';|" config/config.inc.php
+sudo sed -i "s|\$config\['smtp_server'\] = .*|\$config\['smtp_server'\] = 'localhost';|" config/config.inc.php
+sudo mysql -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" < SQL/mysql.initial.sql
+check_error "Cấu hình Roundcube thất bại"
+
+# Cấu hình Apache cho Roundcube
+sudo bash -c "cat > /etc/httpd/conf.d/roundcube.conf <<EOF
+Alias /roundcube /var/www/html/roundcube
+<Directory /var/www/html/roundcube>
+    Options -Indexes
+    AllowOverride All
+    Require all granted
+</Directory>
+EOF"
+sudo systemctl restart httpd
+
+# Tạo người dùng email
+echo "Tạo người dùng email $EMAIL_USER..."
+sudo useradd -m "$EMAIL_USER"
+echo "$EMAIL_USER:$EMAIL_PASS" | sudo chpasswd
+sudo mkdir -p /home/"$EMAIL_USER"/Maildir
+sudo chown -R "$EMAIL_USER":"$EMAIL_USER" /home/"$EMAIL_USER"/Maildir
+sudo chmod -R 700 /home/"$EMAIL_USER"/Maildir
+check_error "Tạo người dùng email thất bại"
+
+# Mở port trên firewall
+echo "Mở port trên firewall..."
+sudo systemctl is-active firewalld >/dev/null 2>&1 || sudo systemctl start firewalld
+sudo firewall-cmd --add-service={http,https,smtp} --permanent
+sudo firewall-cmd --add-port=143/tcp --permanent
+sudo firewall-cmd --reload
+check_error "Cấu hình firewall thất bại"
+
+# Hoàn tất
+echo "Cài đặt hoàn tất!"
+echo "Truy cập Roundcube tại: https://$DOMAIN/roundcube"
+echo "Đăng nhập với: $EMAIL_USER / $EMAIL_PASS"
+echo "Kiểm tra log nếu có lỗi: /var/log/dovecot.log, /var/www/html/roundcube/logs/errors.log"
