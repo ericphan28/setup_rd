@@ -181,8 +181,28 @@ sudo systemctl status postfix
 sudo systemctl status dovecot
 sudo systemctl status httpd
 
+[ -f /etc/pki/dovecot/certs/dovecot.pem ] || {
+    sudo mkdir -p /etc/pki/dovecot/certs /etc/pki/dovecot/private
+    sudo openssl req -new -x509 -days 365 -nodes -out /etc/pki/dovecot/certs/dovecot.pem -keyout /etc/pki/dovecot/private/dovecot.key -subj "/C=VN/ST=Hanoi/L=Hanoi/O=YourOrg/CN=mail.rocketsmtp.site"
+}
+sudo chmod 644 /etc/pki/dovecot/certs/dovecot.pem
+sudo chmod 600 /etc/pki/dovecot/private/dovecot.key
+sudo chown dovecot:dovecot /etc/pki/dovecot/certs/dovecot.pem /etc/pki/dovecot/private/dovecot.key
+
+echo "Cấu hình lại SSL trong 10-ssl.conf..."
+sudo sed -i 's|^ssl =.*|ssl = yes|' /etc/dovecot/conf.d/10-ssl.conf
+sudo sed -i 's|^ssl_cert =.*|ssl_cert = </etc/pki/dovecot/certs/dovecot.pem|' /etc/dovecot/conf.d/10-ssl.conf
+sudo sed -i 's|^ssl_key =.*|ssl_key = </etc/pki/dovecot/private/dovecot.key|' /etc/dovecot/conf.d/10-ssl.conf
+
+echo "Khởi động lại Dovecot..."
+sudo systemctl restart dovecot
+
+
+
 # Hoàn tất cài đặt
 echo "Cài đặt hoàn tất!"
 echo "Truy cập Roundcube tại: http://103.176.20.154/roundcube"
 echo "Đăng nhập với: mailuser / pss123"
 echo "Kiểm tra log nếu có lỗi: /var/log/dovecot.log và /var/www/html/roundcube/logs/errors.log"
+
+
