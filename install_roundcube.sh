@@ -6,6 +6,18 @@
 # User: mailuser
 # Password: pss123
 
+Cài đặt EPEL (nếu chưa cài đặt)
+echo "Cài đặt EPEL để đảm bảo các gói PHP bổ sung..."
+dnf install -y epel-release || { echo "Lỗi: Không thể cài đặt EPEL."; exit 1; }
+
+Cài đặt kho Remi và kích hoạt PHP 8.3
+echo "Cài đặt kho Remi và kích hoạt PHP 8.3..."
+dnf install -y https://rpms.remirepo.net/enterprise/remi-release-9.rpm || { echo "Lỗi: Không thể cài đặt kho Remi."; exit 1; }
+dnf install -y dnf-utils || { echo "Lỗi: Không thể cài đặt dnf-utils."; exit 1; }
+
+
+
+
 # Cập nhật hệ thống
 echo "Đang cập nhật hệ thống..."
 sudo dnf update -y
