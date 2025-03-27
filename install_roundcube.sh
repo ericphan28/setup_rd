@@ -6,23 +6,19 @@
 # User: mailuser
 # Password: pss123
 
-#Cài đặt EPEL (nếu chưa cài đặt)
-echo "Cài đặt EPEL để đảm bảo các gói PHP bổ sung..."
-dnf install -y epel-release || { echo "Lỗi: Không thể cài đặt EPEL."; exit 1; }
-
-#Cài đặt kho Remi và kích hoạt PHP 8.3
-echo "Cài đặt kho Remi và kích hoạt PHP 8.3..."
-dnf install -y https://rpms.remirepo.net/enterprise/remi-release-9.rpm || { echo "Lỗi: Không thể cài đặt kho Remi."; exit 1; }
-dnf install -y dnf-utils || { echo "Lỗi: Không thể cài đặt dnf-utils."; exit 1; }
-
-
-
-
 # Cập nhật hệ thống
 echo "Đang cập nhật hệ thống..."
 sudo dnf update -y
 if [ $? -ne 0 ]; then
     echo "Lỗi: Không thể cập nhật hệ thống. Vui lòng kiểm tra kết nối mạng hoặc quyền root."
+    exit 1
+fi
+
+# Cài đặt EPEL để có thêm gói phần mềm
+echo "Cài đặt kho EPEL..."
+sudo dnf install epel-release -y
+if [ $? -ne 0 ]; then
+    echo "Lỗi: Không thể cài đặt EPEL."
     exit 1
 fi
 
@@ -77,15 +73,16 @@ echo "MariaDB đã được cài đặt và khởi động thành công."
 echo "Đang bảo mật MariaDB... Vui lòng làm theo hướng dẫn trên màn hình."
 sudo mysql_secure_installation
 
-# Cài đặt PHP và các module cần thiết
-echo "Cài đặt PHP và các module cần thiết..."
-sudo dnf install -y php php-mysqlnd php-gd php-imap php-ldap php-odbc php-pear php-xml php-xmlrpc php-mbstring php-snmp php-soap php-tidy php-intl php-zip
+# Cài đặt PHP 8.1 và các module cần thiết
+echo "Cài đặt PHP 8.1 và các module cần thiết..."
+sudo dnf module enable php:8.1 -y
+sudo dnf install -y php php-mysqlnd php-gd php81-php-imap php-ldap php-odbc php-pear php-xml php-mbstring php-snmp php-soap php-intl php-zip
 if [ $? -ne 0 ]; then
     echo "Lỗi: Không thể cài đặt PHP hoặc các module cần thiết."
     exit 1
 fi
 sudo systemctl restart httpd
-echo "PHP đã được cài đặt và Apache đã được khởi động lại."
+echo "PHP 8.1 đã được cài đặt và Apache đã được khởi động lại."
 
 # Tạo cơ sở dữ liệu và người dùng cho Roundcube
 echo "Tạo cơ sở dữ liệu và người dùng cho Roundcube..."
