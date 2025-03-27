@@ -44,9 +44,11 @@ y
 y
 EOF
 
+sudo dnf install -y https://rpms.remirepo.net/enterprise/remi-release-9.rpm
+
 # Cài đặt PHP 8.3 và các module cần thiết
-echo "Cài đặt PHP 8.1 và module..."
-sudo dnf module enable php:8.3 -y
+echo "Cài đặt PHP 8.3 và module..."
+sudo dnf module enable php:remi-8.3 -y
 sudo dnf install -y php83-php php83-php-mysqlnd php83-php-gd php83-php-imap php83-php-ldap php83-php-odbc php83-php-pear php83-php-xml php83-php-mbstring php83-php-snmp php83-php-soap php83-php-intl php83-php-zip
 sudo systemctl restart httpd
 
@@ -159,10 +161,12 @@ sudo systemctl restart httpd
 
 # Tạo người dùng email
 echo "Tạo người dùng email mailuser..."
-sudo useradd -m mailuser || true
+sudo useradd -m  || true
 echo "pss123" | sudo passwd --stdin mailuser
 sudo mkdir -p /home/mailuser/Maildir
 sudo chown -R mailuser:mailuser /home/mailuser/Maildir
+sudo chmod -R 700 /home/mailuser/Maildir
+
 
 # Mở port trên firewall
 echo "Mở port trên firewall..."
