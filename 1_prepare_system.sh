@@ -54,7 +54,7 @@ fi
 echo "Cập nhật hệ thống và cài đặt công cụ cần thiết..."
 dnf update -y || { echo "Lỗi: Không thể cập nhật hệ thống."; exit 1; }
 dnf install -y epel-release || { echo "Lỗi: Không thể cài đặt epel-release."; exit 1; }
-dnf install -y wget curl net-tools firewalld tar bind-utils nmap-ncat || { echo "Lỗi: Không thể cài đặt công cụ."; exit 1; }
+dnf install -y wget curl net-tools firewalld tar bind-utils nmap-ncat s-nail || { echo "Lỗi: Không thể cài đặt công cụ."; exit 1; }
 
 # Bước 4: Thiết lập hostname
 echo "Thiết lập hostname..."
