@@ -21,7 +21,7 @@ fi
 
 # Cập nhật hệ thống
 echo "Cập nhật hệ thống..."
-dnf update -y || { echo "Lỗi: Không thể cập nhật hệ thống."; exit 1; }
+#dnf update -y || { echo "Lỗi: Không thể cập nhật hệ thống."; exit 1; }
 
 # Cài đặt các công cụ cơ bản
 echo "Cài đặt các công cụ cơ bản..."
