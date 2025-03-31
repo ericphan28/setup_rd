@@ -1,241 +1,126 @@
 #!/bin/bash
+# Script to install support tools for Roundcube setup on AlmaLinux 9.3
 
-# Script cài đặt và cấu hình mail server toàn diện (Postfix + Dovecot + Let's Encrypt)
-# Chạy với quyền root: sudo bash setup_mail_server.sh
+# Refresh package list
+dnf makecache
+dnf install -y epel-release
 
-# Biến cấu hình
-MAIL_USER="mailuser"
-DOMAIN="rocketsmtp.site"
-HOSTNAME="mail.$DOMAIN"
-MAIL_DIR="/home/$MAIL_USER/Maildir"
+# Install tools
+dnf install -y telnet
+dnf install -y nano
+dnf install -y bind-utils
+dnf install -y tar
+dnf install -y firewalld
+dnf install -y s-nail
 
-# Hàm hiển thị lỗi mà không thoát
-show_error() {
-    echo "LỖI: $1"
-    echo "Tiếp tục chạy script để debug. Kiểm tra log chi tiết nếu cần."
-}
+# Enable and start firewalld
+systemctl enable firewalld --now
+firewall-cmd --add-port=25/tcp --permanent && firewall-cmd --add-port=587/tcp --permanent && firewall-cmd --add-port=465/tcp --permanent && firewall-cmd --add-port=143/tcp --permanent && firewall-cmd --add-port=110/tcp --permanent && firewall-cmd --add-port=993/tcp --permanent && firewall-cmd --add-port=995/tcp --permanent && firewall-cmd --add-port=80/tcp --permanent && firewall-cmd --add-port=443/tcp --permanent && firewall-cmd --reload
 
-# Kiểm tra quyền root
-if [ "$(id -u)" != "0" ]; then
-    show_error "Script này cần chạy với quyền root. Sử dụng sudo hoặc đăng nhập root."
-    exit 1
+echo "Support tools installation completed!"
+
+
+#!/bin/bash
+# Script to check DNS and SPF records for rocketsmtp.site
+
+echo "Checking DNS and SPF records for rocketsmtp.site..."
+
+# Check A record
+echo -e "\n1. A Record (should return 103.176.20.154):"
+dig A rocketsmtp.site +short
+
+# Check MX record
+echo -e "\n2. MX Record (should return mail server, e.g., mail.rocketsmtp.site):"
+dig MX rocketsmtp.site +short
+
+# Check SPF record
+echo -e "\n3. SPF Record (should return v=spf1 ip4:103.176.20.154 -all):"
+dig TXT rocketsmtp.site +short
+
+# Check PTR record
+echo -e "\n4. PTR Record (should return mail.rocketsmtp.site or similar):"
+dig -x 103.176.20.154 +short
+
+echo -e "\nNote: For blacklist check, visit https://mxtoolbox.com/blacklists.aspx and enter 103.176.20.154"
+echo "Done! Review the output and update DNS records if necessary."
+
+
+#!/bin/bash
+# Script to install and configure Postfix and Dovecot on AlmaLinux 9.3
+
+# Install Postfix and Dovecot
+dnf install -y postfix
+dnf install -y dovecot
+
+# Configure Postfix
+CONFIG_FILE="/etc/postfix/main.cf"
+[ ! -f "$CONFIG_FILE" ] && echo "Error: $CONFIG_FILE not found" && exit 1
+grep -q "^myhostname =" "$CONFIG_FILE" && sed -i "s/^myhostname =.*/myhostname = rocketsmtp.site/" "$CONFIG_FILE" || echo "myhostname = rocketsmtp.site" >> "$CONFIG_FILE"
+grep -q "^mydomain =" "$CONFIG_FILE" && sed -i "s/^mydomain =.*/mydomain = rocketsmtp.site/" "$CONFIG_FILE" || echo "mydomain = rocketsmtp.site" >> "$CONFIG_FILE"
+grep -q "^myorigin =" "$CONFIG_FILE" && sed -i "s/^myorigin =.*/myorigin = \$mydomain/" "$CONFIG_FILE" || echo "myorigin = \$mydomain" >> "$CONFIG_FILE"
+grep -q "^inet_interfaces =" "$CONFIG_FILE" && sed -i "s/^inet_interfaces =.*/inet_interfaces = all/" "$CONFIG_FILE" || echo "inet_interfaces = all" >> "$CONFIG_FILE"
+grep -q "^mydestination =" "$CONFIG_FILE" && sed -i "s/^mydestination =.*/mydestination = \$myhostname, localhost.\$mydomain, localhost/" "$CONFIG_FILE" || echo "mydestination = \$myhostname, localhost.\$mydomain, localhost" >> "$CONFIG_FILE"
+grep -q "^mynetworks =" "$CONFIG_FILE" && sed -i "s/^mynetworks =.*/mynetworks = 127.0.0.0\/8, 103.176.20.154\/32/" "$CONFIG_FILE" || echo "mynetworks = 127.0.0.0\/8, 103.176.20.154\/32" >> "$CONFIG_FILE"
+grep -q "^smtpd_sasl_type =" "$CONFIG_FILE" && sed -i "s/^smtpd_sasl_type =.*/smtpd_sasl_type = dovecot/" "$CONFIG_FILE" || echo "smtpd_sasl_type = dovecot" >> "$CONFIG_FILE"
+grep -q "^smtpd_sasl_path =" "$CONFIG_FILE" && sed -i "s/^smtpd_sasl_path =.*/smtpd_sasl_path = private\/auth/" "$CONFIG_FILE" || echo "smtpd_sasl_path = private\/auth" >> "$CONFIG_FILE"
+grep -q "^smtpd_sasl_auth_enable =" "$CONFIG_FILE" && sed -i "s/^smtpd_sasl_auth_enable =.*/smtpd_sasl_auth_enable = yes/" "$CONFIG_FILE" || echo "smtpd_sasl_auth_enable = yes" >> "$CONFIG_FILE"
+
+echo "submission inet n - n - - smtpd" >> /etc/postfix/master.cf
+
+# Configure Dovecot
+DOVECOT_CONF="/etc/dovecot/dovecot.conf"
+[ ! -f "$DOVECOT_CONF" ] && echo "Error: $DOVECOT_CONF not found" && exit 1
+grep -q "^protocols =" "$DOVECOT_CONF" && sed -i "s/^protocols =.*/protocols = imap pop3/" "$DOVECOT_CONF" || echo "protocols = imap pop3" >> "$DOVECOT_CONF"
+
+MAIL_CONF="/etc/dovecot/conf.d/10-mail.conf"
+[ ! -f "$MAIL_CONF" ] && echo "Error: $MAIL_CONF not found" && exit 1
+grep -q "^mail_location =" "$MAIL_CONF" && sed -i "s/^mail_location =.*/mail_location = maildir:~\/Maildir/" "$MAIL_CONF" || echo "mail_location = maildir:~\/Maildir" >> "$MAIL_CONF"
+
+AUTH_CONF="/etc/dovecot/conf.d/10-auth.conf"
+[ ! -f "$AUTH_CONF" ] && echo "Error: $AUTH_CONF not found" && exit 1
+grep -q "^disable_plaintext_auth =" "$AUTH_CONF" && sed -i "s/^disable_plaintext_auth =.*/disable_plaintext_auth = yes/" "$AUTH_CONF" || echo "disable_plaintext_auth = yes" >> "$AUTH_CONF"
+
+MASTER_CONF="/etc/dovecot/conf.d/10-master.conf"
+[ ! -f "$MASTER_CONF" ] && echo "Error: $MASTER_CONF not found" && exit 1
+if ! grep -q "unix_listener /var/spool/postfix/private/auth" "$MASTER_CONF"; then
+    sed -i "/^service auth {/a \  unix_listener /var/spool/postfix/private/auth {\n    mode = 0660\n    user = postfix\n    group = postfix\n  }" "$MASTER_CONF"
 fi
 
-echo "Bắt đầu cài đặt và cấu hình mail server..."
+# Create mailuser
+useradd -m mailuser && echo "mailuser:pss123" | chpasswd
 
-# Kiểm tra môi trường
-echo "Kiểm tra môi trường..."
-if ! command -v dnf >/dev/null 2>&1; then
-    show_error "Không tìm thấy dnf. Hệ thống phải dùng CentOS/RHEL với dnf."
-fi
+# Start services
+systemctl enable postfix --now
+systemctl enable dovecot --now
 
-# Cài đặt EPEL repository
-echo "Cài đặt EPEL repository cho certbot..."
-dnf install -y epel-release || show_error "Không thể cài đặt EPEL repository."
+echo "Mail server setup completed! Run 'systemctl status postfix' and 'systemctl status dovecot' to verify."
 
-# Cập nhật hệ thống
-#echo "Cập nhật hệ thống..."
-dnf update -y || show_error "Không thể cập nhật hệ thống."
 
-# Cài đặt các gói cần thiết
-echo "Cài đặt Postfix, Dovecot, s-nail, dovecot-pigeonhole, certbot..."
-dnf install -y postfix dovecot s-nail dovecot-pigeonhole certbot || show_error "Không thể cài đặt các gói cần thiết."
+#!/bin/bash
+# Script to install and configure SSL for Postfix and Dovecot
 
-# Kiểm tra gói đã cài chưa
-for pkg in postfix dovecot s-nail dovecot-pigeonhole certbot; do
-    if ! rpm -q "$pkg" >/dev/null 2>&1; then
-        show_error "Gói $pkg chưa được cài đặt."
-    else
-        echo " - Gói $pkg đã được cài đặt."
-    fi
-done
+# Install Certbot
+dnf install -y certbot python3-certbot-nginx
 
-# Tạo user mail
-echo "Tạo user $MAIL_USER nếu chưa tồn tại..."
-if ! id "$MAIL_USER" >/dev/null 2>&1; then
-    useradd -m -s /sbin/nologin "$MAIL_USER" || show_error "Không thể tạo user $MAIL_USER."
-fi
+# Obtain SSL certificate
+certbot certonly --standalone -d rocketsmtp.site --non-interactive --agree-tos --email ericphan28@gmail.com
 
-# Tạo thư mục Maildir
-echo "Tạo thư mục Maildir cho $MAIL_USER..."
-if [ ! -d "$MAIL_DIR" ]; then
-    mkdir -p "$MAIL_DIR"/{new,cur,tmp} || show_error "Không thể tạo thư mục Maildir."
-    chown -R "$MAIL_USER:$MAIL_USER" "$MAIL_DIR" || show_error "Không thể chown thư mục Maildir."
-    chmod -R 700 "$MAIL_DIR" || show_error "Không thể chmod thư mục Maildir."
-else
-    echo "Thư mục Maildir đã tồn tại, bỏ qua."
-fi
+# Configure Postfix SSL
+echo "smtpd_tls_cert_file = /etc/letsencrypt/live/rocketsmtp.site/fullchain.pem" >> /etc/postfix/main.cf
+echo "smtpd_tls_key_file = /etc/letsencrypt/live/rocketsmtp.site/privkey.pem" >> /etc/postfix/main.cf
+echo "smtpd_tls_security_level = may" >> /etc/postfix/main.cf
+echo "smtp_tls_security_level = may" >> /etc/postfix/main.cf
+echo "smtps inet n - n - - smtpd" >> /etc/postfix/master.cf
+echo "  -o smtpd_tls_wrappermode=yes" >> /etc/postfix/master.cf
+systemctl restart postfix
 
-# Cấu hình Postfix
-if [ -d "/etc/postfix" ]; then
-    echo "Cấu hình Postfix..."
-    cat <<EOF > /etc/postfix/main.cf
-myhostname = $HOSTNAME
-mydomain = $DOMAIN
-myorigin = \$mydomain
-inet_interfaces = all
-inet_protocols = all
-mydestination = \$myhostname, localhost.\$mydomain, localhost, \$mydomain
-home_mailbox = Maildir/
-smtpd_banner = \$myhostname ESMTP
-smtpd_tls_cert_file = /etc/letsencrypt/live/$DOMAIN/fullchain.pem
-smtpd_tls_key_file = /etc/letsencrypt/live/$DOMAIN/privkey.pem
-smtpd_use_tls = yes
-smtp_tls_security_level = may
-smtpd_tls_security_level = may
-smtpd_sasl_auth_enable = yes
-smtpd_sasl_type = dovecot
-smtpd_sasl_path = private/auth
-smtpd_sasl_security_options = noanonymous
-smtpd_recipient_restrictions = permit_sasl_authenticated, permit_mydestination, reject_unauth_destination
-mailbox_transport = lmtp:unix:/var/spool/postfix/private/dovecot-lmtp
-EOF
+# Configure Dovecot SSL
+sed -i "s|^ssl_cert =.*|ssl_cert = </etc/letsencrypt/live/rocketsmtp.site/fullchain.pem|" /etc/dovecot/conf.d/10-ssl.conf
+sed -i "s|^ssl_key =.*|ssl_key = </etc/letsencrypt/live/rocketsmtp.site/privkey.pem|" /etc/dovecot/conf.d/10-ssl.conf
+sed -i "s|^ssl =.*|ssl = yes|" /etc/dovecot/conf.d/10-ssl.conf
+systemctl restart dovecot
 
-    echo "Cấu hình port 587 trong Postfix..."
-    cat <<EOF > /etc/postfix/master.cf
-submission inet n       -       y       -       -       smtpd
-  -o syslog_name=postfix/submission
-  -o smtpd_tls_security_level=encrypt
-  -o smtpd_sasl_auth_enable=yes
-  -o smtpd_reject_unlisted_recipient=no
-  -o smtpd_recipient_restrictions=permit_sasl_authenticated,reject
-EOF
+echo "SSL setup completed! Test with:"
+echo "  openssl s_client -connect 127.0.0.1:587 -starttls smtp (Postfix)"
+echo "  openssl s_client -connect 127.0.0.1:993 (Dovecot)"
 
-    echo "Kiểm tra cấu hình Postfix..."
-    postconf -n > /dev/null 2>&1 || show_error "Cấu hình Postfix không hợp lệ. Kiểm tra /etc/postfix/main.cf."
-else
-    show_error "Thư mục /etc/postfix không tồn tại. Postfix chưa được cài đặt."
-fi
-
-# Cấu hình Dovecot
-if [ -d "/etc/dovecot" ]; then
-    echo "Cấu hình Dovecot..."
-    cat <<EOF > /etc/dovecot/dovecot.conf
-protocols = imap lmtp
-listen = *, ::
-EOF
-
-    cat <<EOF > /etc/dovecot/conf.d/10-auth.conf
-auth_mechanisms = plain login
-auth_username_format = %n
-!include auth-system.conf.ext
-EOF
-
-    cat <<EOF > /etc/dovecot/conf.d/10-mail.conf
-mail_location = maildir:/home/%u/Maildir
-mail_access_groups = mail
-EOF
-
-    cat <<EOF > /etc/dovecot/conf.d/10-ssl.conf
-ssl = required
-ssl_cert = </etc/letsencrypt/live/$DOMAIN/fullchain.pem
-ssl_key = </etc/letsencrypt/live/$DOMAIN/privkey.pem
-EOF
-
-    cat <<EOF > /etc/dovecot/conf.d/20-lmtp.conf
-service lmtp {
-  unix_listener /var/spool/postfix/private/dovecot-lmtp {
-    mode = 0600
-    user = postfix
-    group = postfix
-  }
-}
-protocol lmtp {
-  mail_plugins = \$mail_plugins sieve
-  postmaster_address = postmaster@$DOMAIN
-}
-EOF
-
-    echo "Cấu hình logging chi tiết cho Dovecot..."
-    cat <<EOF > /etc/dovecot/conf.d/10-logging.conf
-log_path = /var/log/dovecot.log
-info_log_path = /var/log/dovecot-info.log
-debug_log_path = /var/log/dovecot-debug.log
-mail_debug = yes
-EOF
-    touch /var/log/dovecot{,-info,-debug}.log
-    chown dovecot:dovecot /var/log/dovecot*.log || show_error "Không thể chown file log Dovecot."
-    chmod 660 /var/log/dovecot*.log || show_error "Không thể chmod file log Dovecot."
-else
-    show_error "Thư mục /etc/dovecot không tồn tại. Dovecot chưa được cài đặt."
-fi
-
-# Cấu hình logging cho Postfix
-if [ -f "/etc/postfix/main.cf" ]; then
-    echo "Cấu hình logging chi tiết cho Postfix..."
-    sed -i 's/#syslog_facility = mail/syslog_facility = mail/' /etc/postfix/main.cf
-    sed -i 's/#debug_peer_level = 2/debug_peer_level = 2/' /etc/postfix/main.cf
-fi
-
-# Cài đặt Let's Encrypt
-echo "Cài đặt chứng chỉ Let's Encrypt..."
-if command -v certbot >/dev/null 2>&1; then
-    certbot certonly --standalone -d "$DOMAIN" --non-interactive --agree-tos --email "admin@$DOMAIN" || show_error "Không thể tạo chứng chỉ Let's Encrypt. Kiểm tra DNS của $DOMAIN."
-else
-    show_error "Certbot không được cài đặt."
-fi
-
-# Kiểm tra chứng chỉ
-if [ ! -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ] || [ ! -f "/etc/letsencrypt/live/$DOMAIN/privkey.pem" ]; then
-    show_error "Chứng chỉ Let's Encrypt không tồn tại. Dùng SSL tự ký tạm thời."
-    openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/pki/tls/private/mail.key -out /etc/pki/tls/certs/mail.crt -subj "/CN=$DOMAIN" || show_error "Không thể tạo SSL tự ký."
-    if [ -f "/etc/postfix/main.cf" ]; then
-        sed -i "s|smtpd_tls_cert_file = .*|smtpd_tls_cert_file = /etc/pki/tls/certs/mail.crt|" /etc/postfix/main.cf
-        sed -i "s|smtpd_tls_key_file = .*|smtpd_tls_key_file = /etc/pki/tls/private/mail.key|" /etc/postfix/main.cf
-    fi
-    if [ -f "/etc/dovecot/conf.d/10-ssl.conf" ]; then
-        sed -i "s|ssl_cert = .*|ssl_cert = </etc/pki/tls/certs/mail.crt|" /etc/dovecot/conf.d/10-ssl.conf
-        sed -i "s|ssl_key = .*|ssl_key = </etc/pki/tls/private/mail.key|" /etc/dovecot/conf.d/10-ssl.conf
-    fi
-fi
-
-# Khởi động dịch vụ
-echo "Khởi động Postfix và Dovecot..."
-systemctl enable postfix dovecot 2>/dev/null || show_error "Không thể enable Postfix hoặc Dovecot."
-systemctl restart postfix dovecot 2>/dev/null || show_error "Không thể restart Postfix hoặc Dovecot."
-
-# Kiểm tra trạng thái dịch vụ
-echo "Kiểm tra trạng thái Postfix..."
-if systemctl is-active postfix >/dev/null 2>&1; then
-    echo " - Postfix đang chạy."
-else
-    show_error "Postfix không chạy. Xem log: journalctl -u postfix"
-fi
-
-echo "Kiểm tra trạng thái Dovecot..."
-if systemctl is-active dovecot >/dev/null 2>&1; then
-    echo " - Dovecot đang chạy."
-else
-    show_error "Dovecot không chạy. Xem log: journalctl -u dovecot"
-fi
-
-# Mở port trên firewall
-echo "Mở các port cần thiết trên firewall..."
-firewall-cmd --permanent --add-port={25,587,143,993}/tcp || show_error "Không thể mở port trên firewall."
-firewall-cmd --reload || show_error "Không thể reload firewall."
-
-# Test gửi email
-echo "Test gửi email..."
-if command -v s-nail >/dev/null 2>&1; then
-    echo "Test email from $HOSTNAME" | s-nail -s "Test Mail Server" -r "$MAIL_USER@$DOMAIN" "$MAIL_USER@$DOMAIN"
-    if [ $? -eq 0 ]; then
-        echo " - Gửi email thành công."
-        sleep 2
-        if ls "$MAIL_DIR/new/"* >/dev/null 2>&1; then
-            echo " - Email đã được lưu vào $MAIL_DIR/new/."
-        else
-            show_error "Email không được lưu vào Maildir. Kiểm tra log: journalctl -u dovecot"
-        fi
-    else
-        show_error "Không gửi được email. Kiểm tra log: journalctl -u postfix"
-    fi
-else
-    show_error "s-nail không được cài đặt."
-fi
-
-# Hoàn tất
-echo "Hoàn tất cài đặt mail server!"
-echo "Kiểm tra thư mục $MAIL_DIR/new/ để xem email test."
-echo "Log Postfix: /var/log/maillog"
-echo "Log Dovecot: /var/log/dovecot.log, /var/log/dovecot-info.log, /var/log/dovecot-debug.log"
-echo "Nếu có lỗi, chạy 'journalctl -u postfix' hoặc 'journalctl -u dovecot' để xem chi tiết."
