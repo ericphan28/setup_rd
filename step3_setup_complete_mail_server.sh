@@ -106,6 +106,8 @@ dnf install -y certbot python3-certbot-nginx
 certbot certonly --standalone -d rocketsmtp.site --non-interactive --agree-tos --email ericphan28@gmail.com
 
 # Configure Postfix SSL
+sed -i "/smtpd_tls_cert_file = \/etc\/pki\/tls\/certs\/postfix.pem/d" /etc/postfix/main.cf
+sed -i "/smtpd_tls_key_file = \/etc\/pki\/tls\/private\/postfix.key/d" /etc/postfix/main.cf
 echo "smtpd_tls_cert_file = /etc/letsencrypt/live/rocketsmtp.site/fullchain.pem" >> /etc/postfix/main.cf
 echo "smtpd_tls_key_file = /etc/letsencrypt/live/rocketsmtp.site/privkey.pem" >> /etc/postfix/main.cf
 echo "smtpd_tls_security_level = may" >> /etc/postfix/main.cf
@@ -124,3 +126,149 @@ echo "SSL setup completed! Test with:"
 echo "  openssl s_client -connect 127.0.0.1:587 -starttls smtp (Postfix)"
 echo "  openssl s_client -connect 127.0.0.1:993 (Dovecot)"
 
+
+#!/bin/bash
+# Script to install and configure Apache and PHP for Roundcube
+
+# Install Apache
+dnf install -y httpd mod_ssl
+systemctl enable httpd --now
+
+sed -i "s|SSLCertificateFile.*|SSLCertificateFile /etc/letsencrypt/live/rocketsmtp.site/fullchain.pem|" /etc/httpd/conf.d/ssl.conf
+sed -i "s|SSLCertificateKeyFile.*|SSLCertificateKeyFile /etc/letsencrypt/live/rocketsmtp.site/privkey.pem|" /etc/httpd/conf.d/ssl.conf
+
+systemctl restart httpd
+
+echo "Apache setup completed! Test with:"
+echo "  curl http://127.0.0.1 (HTTP)"
+echo "  curl https://127.0.0.1 (HTTP)"
+echo "  openssl s_client -connect 127.0.0.1:443 (HTTPS)"
+
+dnf install -y php php-fpm php-mysqlnd php-gd php-mbstring php-xml php-intl php-zip
+
+echo "<VirtualHost *:80>
+    ServerName rocketsmtp.site
+    DocumentRoot /var/www/html
+    <Directory /var/www/html>
+        Options -Indexes
+        AllowOverride All
+        Require all granted
+        DirectoryIndex index.php
+    </Directory>
+    <FilesMatch \".php$\">
+        SetHandler \"proxy:unix:/run/php-fpm/www.sock|fcgi://localhost\"
+    </FilesMatch>
+</VirtualHost>
+<VirtualHost *:443>
+    ServerName rocketsmtp.site
+    DocumentRoot /var/www/html
+    SSLEngine on
+    SSLCertificateFile /etc/letsencrypt/live/rocketsmtp.site/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/rocketsmtp.site/privkey.pem
+    <Directory /var/www/html>
+        Options -Indexes
+        AllowOverride All
+        Require all granted
+        DirectoryIndex index.php
+    </Directory>
+    <FilesMatch \".php$\">
+        SetHandler \"proxy:unix:/run/php-fpm/www.sock|fcgi://localhost\"
+    </FilesMatch>
+</VirtualHost>" > /etc/httpd/conf.d/php.conf
+
+systemctl restart httpd
+
+wget https://github.com/roundcube/roundcubemail/releases/download/1.6.7/roundcubemail-1.6.7-complete.tar.gz -P /tmp
+tar -xzf /tmp/roundcubemail-1.6.7-complete.tar.gz -C /tmp
+mv /tmp/roundcubemail-1.6.7 /var/www/html/roundcube
+chown -R apache:apache /var/www/html/roundcube
+chmod -R 755 /var/www/html/roundcube
+
+rm -f /etc/httpd/conf.d/php.conf
+
+echo "<VirtualHost *:80>
+    ServerName rocketsmtp.site
+    DocumentRoot /var/www/html/roundcube
+    <Directory /var/www/html/roundcube>
+        Options -Indexes
+        AllowOverride All
+        Require all granted
+        DirectoryIndex index.php
+    </Directory>
+    <FilesMatch \".php$\">
+        SetHandler \"proxy:unix:/run/php-fpm/www.sock|fcgi://localhost\"
+    </FilesMatch>
+</VirtualHost>
+<VirtualHost *:443>
+    ServerName rocketsmtp.site
+    DocumentRoot /var/www/html/roundcube
+    SSLEngine on
+    SSLCertificateFile /etc/letsencrypt/live/rocketsmtp.site/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/rocketsmtp.site/privkey.pem
+    <Directory /var/www/html/roundcube>
+        Options -Indexes
+        AllowOverride All
+        Require all granted
+        DirectoryIndex index.php
+    </Directory>
+    <FilesMatch \".php$\">
+        SetHandler \"proxy:unix:/run/php-fpm/www.sock|fcgi://localhost\"
+    </FilesMatch>
+</VirtualHost>" > /etc/httpd/conf.d/roundcube.conf
+
+
+chown -R apache:apache /var/www/html/roundcube
+chmod -R 755 /var/www/html/roundcube
+chmod 644 /var/www/html/roundcube/config/config.inc.php
+
+
+
+
+# Install MariaDB
+dnf install -y mariadb-server
+systemctl enable mariadb --now
+echo -e "\nrootpass123\nY\nY\nY\nY\nY" | mysql_secure_installation
+
+# Create database and user
+mysql -u root -prootpass123 -e "CREATE DATABASE roundcube_db; CREATE USER 'roundcube_user'@'localhost' IDENTIFIED BY 'roundcube_pass123'; GRANT ALL PRIVILEGES ON roundcube_db.* TO 'roundcube_user'@'localhost'; FLUSH PRIVILEGES;"
+
+# Download and install Roundcube
+wget https://github.com/roundcube/roundcubemail/releases/download/1.6.7/roundcubemail-1.6.7-complete.tar.gz -P /tmp
+tar -xzf /tmp/roundcubemail-1.6.7-complete.tar.gz -C /tmp
+mv /tmp/roundcubemail-1.6.7 /var/www/html/roundcube
+chown -R apache:apache /var/www/html/roundcube
+
+# Configure Roundcube
+# Sao chép file mẫu
+cp /var/www/html/roundcube/config/config.inc.php.sample /var/www/html/roundcube/config/config.inc.php
+
+# Cấu hình database, IMAP, SMTP và log
+sed -i "s|$config\['db_dsnw'\] = .*|$config['db_dsnw'] = 'mysql://roundcube_user:roundcube_pass123@localhost/roundcube_db';|" /var/www/html/roundcube/config/config.inc.php
+sed -i "s|$config\['default_host'\] = .*|$config['default_host'] = 'localhost';|" /var/www/html/roundcube/config/config.inc.php
+sed -i "s|$config\['smtp_host'\] = .*|$config['smtp_host'] = 'localhost:587';|" /var/www/html/roundcube/config/config.inc.php
+sed -i "s|$config\['smtp_user'\] = .*|$config['smtp_user'] = '%u';|" /var/www/html/roundcube/config/config.inc.php
+sed -i "s|$config\['smtp_pass'\] = .*|$config['smtp_pass'] = '%p';|" /var/www/html/roundcube/config/config.inc.php
+sed -i "/$config\['db_dsnw'\]/a \$config['log_driver'] = 'file';\n\$config['log_dir'] = '/var/www/html/roundcube/logs/';" /var/www/html/roundcube/config/config.inc.php
+
+# Đảm bảo quyền file
+chown apache:apache /var/www/html/roundcube/config/config.inc.php
+chmod 644 /var/www/html/roundcube/config/config.inc.php
+
+
+# Tạo database và user (nếu chưa có)
+mysql -u root -p <<EOF
+CREATE DATABASE IF NOT EXISTS roundcube_db;
+CREATE USER IF NOT EXISTS 'roundcube_user'@'localhost' IDENTIFIED BY 'roundcube_pass123';
+GRANT ALL PRIVILEGES ON roundcube_db.* TO 'roundcube_user'@'localhost';
+FLUSH PRIVILEGES;
+EXIT;
+EOF
+
+# Nhập mật khẩu root khi được yêu cầu (ví dụ: rootpass123)
+
+# Chạy file SQL để tạo bảng
+mysql -u roundcube_user -proundcube_pass123 roundcube_db < /var/www/html/roundcube/SQL/mysql.initial.sql
+
+echo "Roundcube setup completed! Access at:"
+echo "  https://rocketsmtp.site/roundcube"
+echo "Login with: mailuser@rocketsmtp.site / pss123"
