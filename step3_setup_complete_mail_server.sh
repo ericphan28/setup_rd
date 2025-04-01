@@ -146,6 +146,20 @@ echo "  openssl s_client -connect 127.0.0.1:443 (HTTPS)"
 
 dnf install -y php php-fpm php-mysqlnd php-gd php-mbstring php-xml php-intl php-zip
 
+systemctl enable php-fpm --now
+
+sed -i "s|listen = .*|listen = /run/php-fpm/www.sock|" /etc/php-fpm.d/www.conf
+sed -i "s|;listen.owner = .*|listen.owner = apache|" /etc/php-fpm.d/www.conf
+sed -i "s|;listen.group = .*|listen.group = apache|" /etc/php-fpm.d/www.conf
+sed -i "s|;listen.mode = .*|listen.mode = 0660|" /etc/php-fpm.d/www.conf
+systemctl restart php-fpm
+
+# Bước 4: Đảm bảo module proxy_fcgi được bật trong Apache
+if ! httpd -M | grep -q proxy_fcgi; then
+    echo "LoadModule proxy_module modules/mod_proxy.so" >> /etc/httpd/conf.modules.d/00-base.conf
+    echo "LoadModule proxy_fcgi_module modules/mod_proxy_fcgi.so" >> /etc/httpd/conf.modules.d/00-base.conf
+fi
+
 echo "<VirtualHost *:80>
     ServerName rocketsmtp.site
     DocumentRoot /var/www/html
@@ -254,6 +268,7 @@ sed -i "/$config\['db_dsnw'\]/a \$config['log_driver'] = 'file';\n\$config['log_
 chown apache:apache /var/www/html/roundcube/config/config.inc.php
 chmod 644 /var/www/html/roundcube/config/config.inc.php
 
+systemctl restart httpd
 
 # Tạo database và user (nếu chưa có)
 mysql -u root -p <<EOF
