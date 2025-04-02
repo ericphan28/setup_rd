@@ -13,8 +13,8 @@ DB_PASS="roundcube_pass123"
 MAIL_USER="mailuser"
 MAIL_PASS="pss123"
 ROOT_DB_PASS="rootpass123"
-# Thêm mới: Tùy chọn SSL_TYPE (1 = tự ký, khác 1 = Let's Encrypt)
-SSL_TYPE=1  # Giá trị mặc định, bạn có thể thay đổi trước khi chạy
+# Tùy chọn SSL_TYPE (1 = tự ký, khác 1 = Let's Encrypt)
+SSL_TYPE=1  # Giá trị mặc định, thay đổi trước khi chạy nếu cần
 
 # Bước 1: Cài đặt các gói cần thiết
 dnf install -y epel-release
@@ -34,7 +34,6 @@ firewall-cmd --add-port={25,587,465,143,110,993,995,80,443}/tcp --permanent
 firewall-cmd --reload
 
 # Bước 4: Cấu hình SSL
-# Thêm mới: Logic chọn giữa SSL tự ký và Let's Encrypt dựa trên SSL_TYPE
 if [ "$SSL_TYPE" -eq 1 ]; then
     echo "Tạo chứng chỉ SSL tự ký..."
     mkdir -p /etc/ssl/private
@@ -68,10 +67,13 @@ sed -i "s|^myorigin =.*|myorigin = \$mydomain|" "$CONFIG_FILE" || echo "myorigin
 sed -i "s|^inet_interfaces =.*|inet_interfaces = all|" "$CONFIG_FILE" || echo "inet_interfaces = all" >> "$CONFIG_FILE"
 sed -i "s|^mydestination =.*|mydestination = \$myhostname, localhost.\$mydomain, localhost, ${DOMAIN}|" "$CONFIG_FILE" || echo "mydestination = \$myhostname, localhost.\$mydomain, localhost, ${DOMAIN}" >> "$CONFIG_FILE"
 sed -i "s|^mynetworks =.*|mynetworks = 127.0.0.0/8, 103.176.20.154/32|" "$CONFIG_FILE" || echo "mynetworks = 127.0.0.0/8, 103.176.20.154/32" >> "$CONFIG_FILE"
-sed -i "s|^smtpd_sasl_type =.*|smtpd_sasl_type = dovecot|" "$CONFIG_FILE" || echo "smtpd_sasl_type = dovecot" >> "$CONFIG_FILE"
-sed -i "s|^smtpd_sasl_path =.*|smtpd_sasl_path = private/auth|" "$CONFIG_FILE" || echo "smtpd_sasl_path = private/auth" >> "$CONFIG_FILE"
-sed -i "s|^smtpd_sasl_auth_enable =.*|smtpd_sasl_auth_enable = yes|" "$CONFIG_FILE" || echo "smtpd_sasl_auth_enable = yes" >> "$CONFIG_FILE"
-# Sửa đổi: Sử dụng biến SSL_CERT và SSL_KEY thay vì đường dẫn cố định
+# Cải tiến: Xóa và thêm dòng SASL để xử lý #, khoảng trắng, tab
+sed -i "/^[ \t]*#*smtpd_sasl_type =/d" "$CONFIG_FILE"
+echo "smtpd_sasl_type = dovecot" >> "$CONFIG_FILE"
+sed -i "/^[ \t]*#*smtpd_sasl_path =/d" "$CONFIG_FILE"
+echo "smtpd_sasl_path = private/auth" >> "$CONFIG_FILE"
+sed -i "/^[ \t]*#*smtpd_sasl_auth_enable =/d" "$CONFIG_FILE"
+echo "smtpd_sasl_auth_enable = yes" >> "$CONFIG_FILE"
 sed -i "s|^smtpd_tls_cert_file =.*|smtpd_tls_cert_file = ${SSL_CERT}|" "$CONFIG_FILE" || echo "smtpd_tls_cert_file = ${SSL_CERT}" >> "$CONFIG_FILE"
 sed -i "s|^smtpd_tls_key_file =.*|smtpd_tls_key_file = ${SSL_KEY}|" "$CONFIG_FILE" || echo "smtpd_tls_key_file = ${SSL_KEY}" >> "$CONFIG_FILE"
 sed -i "s|^smtpd_tls_security_level =.*|smtpd_tls_security_level = may|" "$CONFIG_FILE" || echo "smtpd_tls_security_level = may" >> "$CONFIG_FILE"
@@ -105,7 +107,6 @@ EOF
 chmod 600 /etc/dovecot/users
 chown dovecot:dovecot /etc/dovecot/users
 
-# Sửa đổi: Sử dụng biến SSL_CERT và SSL_KEY thay vì đường dẫn cố định
 cat > /etc/dovecot/conf.d/10-ssl.conf <<EOF
 ssl = required
 ssl_cert = <${SSL_CERT}
@@ -189,7 +190,6 @@ chown apache:apache ${WEBROOT}/logs
 chmod 755 ${WEBROOT}/logs
 
 # Bước 10: Cấu hình Apache VirtualHost
-# Sửa đổi: Sử dụng biến SSL_CERT và SSL_KEY thay vì đường dẫn cố định
 cat > /etc/httpd/conf.d/roundcube.conf <<EOF
 <VirtualHost *:80>
     ServerName ${DOMAIN}
@@ -240,6 +240,7 @@ systemctl restart postfix || { echo "Lỗi khởi động postfix. Xem chi tiế
 # Bước 14: Xóa file tạm
 rm -f /tmp/roundcubemail-${ROUNDCUBE_VERSION}-complete.tar.gz
 
+# Thêm lại: Thông báo hoàn tất và hướng dẫn kiểm tra log
 echo "Cấu hình hoàn tất! Truy cập https://${DOMAIN} để đăng nhập với ${MAIL_USER}@${DOMAIN} / ${MAIL_PASS}"
 echo "Kiểm tra log nếu có lỗi:"
 echo "  tail -n 50 ${WEBROOT}/logs/errors.log"
