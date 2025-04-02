@@ -328,7 +328,7 @@ cat ${DKIM_KEY_DIR}/${SELECTOR}.txt # Hiển thị bản ghi DKIM để thêm v�
 # Bước 9: Kiểm tra DKIM với email thử nghiệm
 echo "Gửi mail thử từ ${MAIL_USER}@${DOMAIN} để kiểm tra DKIM:"
 echo "1. Dùng lệnh sau để gửi mail thử:"
-echo "   echo 'Test DKIM content' | /usr/sbin/sendmail -f ${MAIL_USER}@${DOMAIN} <email_nhan>"
+echo "   echo 'Test DKIM content' | /usr/sbin/sendmail -f ${MAIL_USER}@${DOMAIN} cym_sunset@Yahoo.com"
 echo "2. Hoặc dùng Roundcube gửi mail từ ${MAIL_USER}@${DOMAIN} đến một email khác (ví dụ: Gmail)."
 echo "3. Kiểm tra header email nhận được để xác nhận DKIM-Signature."
 echo "4. Kiểm tra log Postfix:"
