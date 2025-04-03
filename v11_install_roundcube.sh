@@ -316,12 +316,28 @@ echo "non_smtpd_milters = unix:/var/run/opendkim/opendkim.sock" >> ${CONFIG_FILE
 echo "milter_default_action = accept" >> ${CONFIG_FILE} # Chấp nhận mail nếu milter thất bại
 echo "milter_protocol = 6" >> ${CONFIG_FILE} # Sử dụng giao thức milter phiên bản 6
 usermod -aG opendkim postfix # Thêm postfix vào nhóm opendkim để truy cập socket
-
 # Bước 7: Khởi động lại dịch vụ
-echo "Khởi động dịch vụ..."
+echo "Khởi động dịch vụ DKIM..."
 systemctl enable opendkim --now || { echo "Lỗi: Không thể khởi động opendkim."; exit 1; } # Kích hoạt và khởi động opendkim
-chmod 660 /var/run/opendkim/opendkim.sock # Sửa quyền socket để postfix truy cập được
-chown opendkim:postfix /var/run/opendkim/opendkim.sock # Đặt nhóm postfix cho socket
+
+# Đợi socket xuất hiện (tối đa 5 giây)
+for i in {1..5}; do
+    if [ -S /var/run/opendkim/opendkim.sock ]; then
+        chmod 660 /var/run/opendkim/opendkim.sock # Sửa quyền socket để postfix truy cập được
+        chown opendkim:postfix /var/run/opendkim/opendkim.sock # Đặt nhóm postfix cho socket
+        echo "Socket đã được tạo và sửa quyền thành công."
+        break
+    fi
+    sleep 1
+done
+
+# Kiểm tra nếu socket không xuất hiện sau 5 giây
+if [ ! -S /var/run/opendkim/opendkim.sock ]; then
+    echo "Lỗi: Socket /var/run/opendkim/opendkim.sock không được tạo sau 5 giây."
+    systemctl status opendkim # Hiển thị trạng thái để debug
+    exit 1
+fi
+
 systemctl restart postfix || { echo "Lỗi: Không thể khởi động lại Postfix."; exit 1; } # Khởi động lại Postfix
 
 # Bước 8: Hiển thị bản ghi DKIM để thêm vào DNS
