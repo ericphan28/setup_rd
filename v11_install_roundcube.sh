@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Ghi lại thời gian bắt đầu
+START_TIME=$(date +%s)
+
 # Script cài đặt và cấu hình Roundcube trên AlmaLinux 9.3
 # Đảm bảo đăng nhập, gửi và nhận mail thành công qua https://rocketsmtp.site
 
@@ -335,3 +338,12 @@ echo "4. Kiểm tra log Postfix:"
 echo "   tail -n 50 /var/log/maillog | grep dkim"
 
 echo "Cấu hình DKIM hoàn tất! Thêm bản ghi DNS và thử gửi mail để kiểm tra."
+
+# Ghi lại thời gian kết thúc
+END_TIME=$(date +%s)
+
+# Tính toán thời gian chạy
+RUN_TIME=$((END_TIME - START_TIME))
+
+# Hiển thị thời gian chạy
+echo "Script đã hoàn thành! Thời gian chạy: ${RUN_TIME} giây."
