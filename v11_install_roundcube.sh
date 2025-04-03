@@ -303,6 +303,7 @@ KeyFile                 ${DKIM_KEY_DIR}/${SELECTOR}.private # Đường dẫn kh
 Socket                  local:/var/run/opendkim/opendkim.sock # Socket để giao tiếp với Postfix
 Syslog                  yes        # Bật log qua syslog
 Umask                   0002       # Đảm bảo socket có quyền rw-rw---- (660)
+LogWhy                  yes
 EOF
 
 # Bước 6: Cấu hình Postfix để ký DKIM
